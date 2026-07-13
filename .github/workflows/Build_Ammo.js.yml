@@ -1,37 +1,44 @@
 name: Build Ammo.js with ALLOW_MEMORY_GROWTH=1
 
 on:
-  workflow_dispatch:      # 手动触发（推荐）
+  workflow_dispatch:     # 手动触发（推荐）
   push:
     branches: [ main ]
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    container:
-      image: emscripten/emsdk:latest   # 官方镜像，带 emcc + cmake
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: 安装额外依赖（匹配官方 Dockerfile）
-        run: |
-          apt-get update -y
-          apt-get install -y --no-install-recommends \
-            cmake python3 \
-            libgeos-dev ed automake autoconf libtool
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
 
-      - name: 配置 + 编译（启用内存自动增长）
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      # 官方 CI 用的就是这个 action + 3.1.35 版本（最稳定）
+      - uses: mymindstorm/setup-emsdk@v16
+        with:
+          version: "3.1.35"
+
+      - run: emcc -v
+      - run: cmake --version
+
+      - name: Configure with Memory Growth
         run: |
-          rm -rf builds
           cmake -B builds \
+            -DCLOSURE=1 \
+            "-DCMAKE_POLICY_VERSION_MINIMUM=3.5" \
             -DALLOW_MEMORY_GROWTH=1 \
-            -DTOTAL_MEMORY=134217728 \     # 初始堆 128MB（够用就行，不够自动增长）
-            # -DCLOSURE=1 \               # 可选：加这行会让最终 JS 更小，但构建稍慢
-          cmake --build builds -j$(nproc)
+            -DTOTAL_MEMORY=134217728
 
-      - name: 上传构建产物
+      - name: Build
+        run: cmake --build builds -- VERBOSE=1
+
+      - name: Upload built files
         uses: actions/upload-artifact@v4
         with:
           name: ammo-with-allow-memory-growth
